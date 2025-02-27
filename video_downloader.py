@@ -2,6 +2,7 @@ import logging
 import os
 import yt_dlp
 import re
+from io import BytesIO
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
@@ -22,53 +23,52 @@ bot_token = os.getenv('BOT_TOKEN')
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}! Send me a link to the TikTok video and i will download it for you!"
+        rf"Hi {user.mention_html()}! Send me a link to any TikTok video and i will download it for you!"
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Help!")
+    await update.message.reply_text("Send me a link to any TikTok video and i will download it for you!")
 
 
 async def get_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     url = update.message.text
 
-    tiktok_pattern = r"(https?://(?:www\.)?tiktok\.com/@[\w.-]+/video/\d+|https?://vm\.tiktok\.com/\w+)"
+    tiktok_pattern = r"(https?://(?:www\.)?tiktok\.com/@[\w.-]+/video/\d+|https?://vm\.tiktok\.com/\w+/?)"
     
     if re.match(tiktok_pattern, url):
-        print("Valid TikTok URL!")
-        await download_tiktok_video(url, update.message._bot, update.message.chat_id)
+        await download_tiktok_video(url, context.bot, update.message.chat_id)
     else:
-        print("Invalid URL!")
         await update.message.reply_text("Please provide a valid TikTok URL.")
 
 
 async def download_tiktok_video(url, bot, chat_id):
-    temp_filename = "temp_tiktok_video.mp4"
+    video_buffer = BytesIO()
 
     ydl_opts = {
         'format': 'best',
-        'outtmpl': temp_filename,
+        'outtmpl': '-',
         'quiet': True,
         'noplaylist': True,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            ydl.download([url])
+            result = ydl.extract_info(url, download=False)
+            video_data = ydl.urlopen(result["url"]).read()
+            video_buffer.write(video_data)
+            video_buffer.seek(0)
         except Exception as e:
-            print(f"Error downloading video: {e}")
+            logger.error(f"Error downloading video: {e}")
+            await bot.send_message(chat_id=chat_id, text="Sorry, something went wrong while downloading the video.")
             return None
 
     try:
-        with open(temp_filename, 'rb') as video_file:
-            await bot.send_video(chat_id=chat_id, video=video_file)
+        await bot.send_video(chat_id=chat_id, video=video_buffer)
     except Exception as e:
-        print(f"Error sending video: {e}")
+        logger.error(f"Error downloading video: {e}")
+        await bot.send_message(chat_id=chat_id, text="Sorry, something went wrong while sending the video.")
         return None
-
-    os.remove(temp_filename)
-    print("Temporary file deleted")
 
 
 def main() -> None:
