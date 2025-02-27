@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 from dotenv import load_dotenv
 
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 bot_token = os.getenv('BOT_TOKEN')
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
@@ -27,19 +29,38 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text("Help!")
 
 
-async def get_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = update.message.text
-    print(text)
-    download_tiktok_video(text)
+async def get_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    url = update.message.text
+
+    await download_tiktok_video(url, update.message._bot, update.message.chat_id)
 
 
-def download_tiktok_video(url):
+async def download_tiktok_video(url, bot, chat_id):
+    temp_filename = "temp_tiktok_video.mp4"
+
     ydl_opts = {
-        'outtmpl': 'tiktok_video.mp4',
+        'format': 'best',
+        'outtmpl': temp_filename,
+        'quiet': True,
+        'noplaylist': True,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+        try:
+            ydl.download([url])
+        except Exception as e:
+            print(f"Error downloading video: {e}")
+            return None
+
+    try:
+        with open(temp_filename, 'rb') as video_file:
+            await bot.send_video(chat_id=chat_id, video=video_file)
+    except Exception as e:
+        print(f"Error sending video: {e}")
+        return None
+
+    os.remove(temp_filename)
+    print("Temporary file deleted")
 
 
 def main() -> None:
@@ -48,7 +69,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
 
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_link))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_url))
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
