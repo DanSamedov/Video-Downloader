@@ -1,6 +1,7 @@
 import logging
 import os
 import yt_dlp
+import re
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
@@ -32,7 +33,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def get_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     url = update.message.text
 
-    await download_tiktok_video(url, update.message._bot, update.message.chat_id)
+    tiktok_pattern = r"(https?://(?:www\.)?tiktok\.com/@[\w.-]+/video/\d+|https?://vm\.tiktok\.com/\w+)"
+    
+    if re.match(tiktok_pattern, url):
+        print("Valid TikTok URL!")
+        await download_tiktok_video(url, update.message._bot, update.message.chat_id)
+    else:
+        print("Invalid URL!")
+        await update.message.reply_text("Please provide a valid TikTok URL.")
 
 
 async def download_tiktok_video(url, bot, chat_id):
